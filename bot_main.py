@@ -13,7 +13,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден в переменных окружения!")
+    print("⚠️ Warning: BOT_TOKEN не найден в .env, используем дефолт или измените код.")
+    # Для тестов можно временно раскомментировать строку ниже
+    # BOT_TOKEN = "YOUR_TEMPORARY_TOKEN_HERE"
 
 # Создаём экземпляры бота и диспетчера
 bot = Bot(token=BOT_TOKEN)
@@ -47,24 +49,14 @@ async def search_command(message: Message):
     status_msg = await message.answer(f"🔍 Ищу информацию по запросу: {query}...")
 
     try:
-        # Определяем, похоже ли на телефон
+        # Определяем, похоже ли на телефон (простая эвристика)
         is_phone_like = bool(re.search(r'[^\da-zA-Z]', query)) or (len(query) >= 10 and query.isdigit())
 
-        # Импортируем функцию поиска (если она у вас есть в отдельном файле)
-        # Если нет search_engine.py, замените на свою логику поиска
-        try:
-            from search_engine import aggregate_search
-            results = await aggregate_search(query, is_phone_search=is_phone_like)
-        except ImportError:
-            # Временно: демо-результаты, если нет search_engine.py
-            results = [
-                {
-                    "source": "Demo Source",
-                    "name": "Тестовый пользователь",
-                    "handle": f"https://example.com/{query}",
-                    "bio": "Это демонстрационный результат поиска"
-                }
-            ] if query else []
+        # Импортируем функцию поиска
+        from search_engine import aggregate_search
+
+        # ВОТ СЮДА: Вызываем функцию с правильно названным аргументом 'is_phone'
+        results = await aggregate_search(query, is_phone=is_phone_like)
 
         if results:
             answer = "✅ **Результаты поиска:**\n\n"

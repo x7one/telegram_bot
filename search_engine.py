@@ -5,48 +5,49 @@ import re
 
 class SearchEngine:
     def __init__(self):
-        # self.github_token = os.getenv("GITHUB_TOKEN")
-        self.phone_api_token = os.getenv("7b4abcbde4fc7322e8ab134fa0d90691")
+        # Глобальный токен для поиска по телефону (пример)
+        self.phone_api_token = os.getenv("PHONE_DB_API_KEY", "7b4abcbde4fc7322e8ab134fa0d90691")
 
-    # async def search_github(self, username: str):
-    #     """Парсинг GitHub"""
-    #     url = f"https://api.github.com/users/{username}"
-    #     headers = {}
-    #     if self.github_token:
-    #         headers["Authorization"] = f"token {self.github_token}"
+    async def search_github(self, username: str):
+        """Парсинг GitHub"""
+        # URL для GitHub API
+        url = f"https://api.github.com/users/{username}"
+        headers = {}
+        # Если есть токен, добавляем его в заголовки
+        # headers["Authorization"] = f"token {os.getenv('GITHUB_TOKEN', '')}" # Раскомментируй, если настроишь токен
 
-    #     try:
-    #         async with aiohttp.ClientSession() as session:
-    #             async with session.get(url, headers=headers, timeout=10) as response:
-    #                 if response.status == 200:
-    #                     data = await response.json()
-    #                     return {
-    #                         "source": "GitHub",
-    #                         "name": data.get("name"),
-    #                         "handle": f"github.com/{data.get('login')}",
-    #                         "avatar": data.get("avatar_url"),
-    #                         "bio": data.get("bio")
-    #                     }
-    #                 elif response.status == 404:
-    #                     return None
-    #     except:
-    #         pass
-    #     return None
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return {
+                            "source": "GitHub",
+                            "name": data.get("name"),
+                            "handle": f"github.com/{data.get('login')}",
+                            "avatar": data.get("avatar_url"),
+                            "bio": data.get("bio")
+                        }
+                    elif response.status == 404:
+                        return None
+        except:
+            pass
+        return None
 
     async def search_vk(self, query: str):
-        """Упрощенный поиск по VK (поиск по ID или скриннейму)"""
+        """Поиск по VK"""
         url = f"https://www.vk.com/{query}"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=10) as response:
-                    if response.status == 200 and "Поиск по ID" not in response.text() and "Ошибка" not in response.text():
-                        # Для простоты считаем, что это он, если страница открылась нормально
-                        # В реальном проекте нужно парсить HTML для имени и фото
+                    if response.status == 200:
+                        # Простая проверка, что страница открылась (без сложных парсинга)
                         return {
                             "source": "VKontakte",
                             "handle": f"vk.com/{query}",
-                            "name": "Пользователь",
-                            "avatar": "https://sun9-67.userapi.com/..."
+                            "name": f"Пользователь {query}",
+                            "avatar": "https://sun9-67.userapi.com/...", # Можно заменить на реальное фото
+                            "bio": f"Найден в VK по адресу: {url}"
                         }
         except:
             pass
@@ -57,8 +58,7 @@ class SearchEngine:
         if not self.phone_api_token:
             return None
 
-        # Пример API (можно заменить на свой, например smotrim.io или truecaller.com)
-        # Упрощенный пример: возвращаем заглушку, если API платный
+        # Пример API (заглушка)
         return {
             "source": "Phone DB (Example)",
             "name": f"Человек с номером {phone}",
@@ -66,17 +66,37 @@ class SearchEngine:
             "avatar": "https://example.com/avatar.png"
         }
 
-async def aggregate_search(query: str, is_phone: bool = False):
-    """Запускает поиск по всем источникам параллельно"""
-    engine = SearchEngine()
-    tasks = []
+    async def aggregate_search(self, query: str, is_phone: bool = False):
+        """
+        Основная функция поиска.
+        Аргументы:
+        - query: сам текст запроса (ник или телефон)
+        - is_phone: флаг, нужно ли искать по телефону
+        """
+        engine = SearchEngine()
+        results = []
 
-    if not is_phone:
-        tasks.append(engine.search_github(query))
-        tasks.append(engine.search_vk(query))
-    else:
-        tasks.append(engine.search_phone(query))
+        if is_phone:
+            # Если флаг is_phone=True, ищем только по телефону
+            phone_res = await engine.search_phone(query)
+            if phone_res:
+                results.append(phone_res)
+        else:
+            # Если флаг is_phone=False, ищем по сайтам (GitHub, VK)
+            # И стараемся распознать телефон по формату
+            github_res = await engine.search_github(query)
+            if github_res:
+                results.append(github_res)
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    found_results = [r for r in results if r is not None]
-    return found_results
+            vk_res = await engine.search_vk(query)
+            if vk_res:
+                results.append(vk_res)
+
+            # Дополнительно: если в запросе есть цифры и длина > 7, проверяем и по телефону (как "бонус")
+            if any(c.isdigit() for c in query) and len(query) > 7:
+                phone_res = await engine.search_phone(query)
+                if phone_res:
+
+                    results.append(phone_res)
+
+        return results
